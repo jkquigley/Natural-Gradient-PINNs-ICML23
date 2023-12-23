@@ -52,8 +52,8 @@ class Hyperrectangle():
 
 
     def measure(self) -> float:
-        return jnp.product(self._r_bounds - self._l_bounds)
-
+        # return jnp.product(self._r_bounds - self._l_bounds)
+        return jnp.prod(self._r_bounds - self._l_bounds)
     
     def random_integration_points(self, key, N=50):
         """
