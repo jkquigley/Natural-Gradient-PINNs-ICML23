@@ -137,8 +137,8 @@ for iteration in range(iterations + 1):
 
         data[iteration // save_freq, :] = [
             iteration,
-            interior_loss,
-            boundary_loss,
+            interior_loss(params),
+            boundary_loss(params),
             l2_error,
             h1_error,
         ]
@@ -151,4 +151,8 @@ for iteration in range(iterations + 1):
             f'\n  with step: {actual_step}'
         )
 
-np.save("data/multi-engd/poisson-2d.npy")
+np.save("data/poisson/multi-engd/data.npy", data)
+
+from util import save
+n = 300
+save("poisson", "multi-engd", n, u_star, v_model, params)

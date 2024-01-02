@@ -1,5 +1,5 @@
 """
-ENGD Optimization.
+Multi-ENGD Optimization.
 One dimensional heat equation example. Solution given by
 
 u(t,x) = exp(pi**2 * t * 0.25) * sin(pi * x).
@@ -53,6 +53,11 @@ def u_star(tx):
     t = tx[0]
     x = tx[1]
     return jnp.exp(-jnp.pi**2 * t * 0.25) * jnp.sin(jnp.pi * x)
+
+v_u_star = vmap(u_star, (0))
+v_grad_u_star = vmap(
+    lambda x: jnp.dot(grad(u_star)(x), grad(u_star)(x))**0.5, (0)
+    )
 
 # defining heat eq inner product
 model_del_0 = model_del_i_factory(argnum=0)
@@ -119,21 +124,21 @@ def heat_operator(u):
 
 # loss terms
 @jit
-def loss_interior(params):
+def interior_loss(params):
     heat_model = heat_operator(lambda tx: model(params, tx))
     return interior_integrator(vmap(heat_model, (0)))
 @jit
-def loss_boundary(params):
+def boundary_loss(params):
     return (
         lboundary_integrator(lambda tx: v_model(params, tx)**2) 
             + rboundary_integrator(lambda tx: v_model(params, tx)**2))
 @jit
-def loss_initial(params):
+def initial_loss(params):
     return initial_integrator(
         lambda tx: (v_u_0(tx) - v_model(params, tx))**2)
 @jit
 def loss(params):
-    return loss_interior(params) + loss_boundary(params) + loss_initial(params)
+    return interior_loss(params) + boundary_loss(params) + initial_loss(params)
 
 # set up grid line search
 grid = jnp.linspace(0, 30, 31)
@@ -148,20 +153,48 @@ v_error_abs_grad = vmap(
         )
 
 def l2_norm(f, integrator):
-    return integrator(lambda x: (f(x))**2)**0.5    
+    return integrator(lambda x: (f(x))**2)**0.5
+
+
+norm_sol_l2 = l2_norm(v_u_star, eval_integrator)
+norm_sol_h1 = norm_sol_l2 + l2_norm(v_grad_u_star, eval_integrator)
 
 # training loop
-for iteration in range(2000):
+iterations = 1000
+save_freq = 10
+
+import numpy as np
+data = np.empty((iterations // save_freq + 1, 6))
+
+for iteration in range(iterations + 1):
     grads = grad(loss)(params)
     nat_grads = nat_grad(params, grads)
+
     params, actual_step = ls_update(params, nat_grads)
 
-    if iteration % 200 == 0:
+    if iteration % save_freq == 0:
         l2_error = l2_norm(v_error, eval_integrator)
         h1_error = l2_error + l2_norm(v_error_abs_grad, eval_integrator)
 
+        data[iteration // save_freq, :] = [
+            iteration,
+            interior_loss(params),
+            boundary_loss(params),
+            initial_loss(params),
+            l2_error,
+            h1_error,
+        ]
+
         print(
-            f'Seed: {seed} NGD Iteration: {iteration} with loss: '
-            f'{loss(params)} with error L2: {l2_error} and error H1: '
-            f'{h1_error} and step: {actual_step}'
+            f'Seed: {seed} Multi-ENGD Iteration: {iteration}'
+            f'\n  with loss: {loss(params)} = {interior_loss(params)} + {boundary_loss(params)} + {initial_loss(params)}'
+            f'\n  with relative L2 error: {l2_error/norm_sol_l2}'
+            f'\n  with relative H1 error: {h1_error/norm_sol_h1}'
+            f'\n  with step: {actual_step}'
         )
+
+np.save("data/heat/engd/data.npy", data)
+
+from util import save
+n = 300
+save("heat", "engd", n, u_star, v_model, params)

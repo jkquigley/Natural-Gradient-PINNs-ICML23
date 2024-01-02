@@ -39,7 +39,7 @@ v_model = vmap(model, (None, 0))
 # solution
 @jit
 def u_star(x):
-    return jnp.product(jnp.sin(jnp.pi * x))
+    return jnp.prod(jnp.sin(jnp.pi * x))
 
 v_u_star = vmap(u_star, (0))
 v_grad_u_star = vmap(
@@ -90,7 +90,7 @@ boundary_optimizer = optax.adam(learning_rate=0.001)
 boundary_opt_state = boundary_optimizer.init(params)
    
 # adam gradient descent with line search
-iterations = 200000
+iterations = 100000
 save_freq = 100
 
 import numpy as np
@@ -117,8 +117,8 @@ for iteration in range(iterations + 1):
 
         data[iteration // save_freq, :] = [
             iteration,
-            interior_loss,
-            boundary_loss,
+            interior_loss(params),
+            boundary_loss(params),
             l2_error,
             h1_error,
         ]
@@ -130,4 +130,8 @@ for iteration in range(iterations + 1):
             f'\n  with relative H1 error: {h1_error / norm_sol_h1}'
         )
 
-np.save("data/multiadam/poisson-2d.npy")
+np.save("data/poisson/multiadam/data.npy", data)
+
+from util import save
+n = 300
+save("poisson", "multiadam", n, u_star, v_model, params)

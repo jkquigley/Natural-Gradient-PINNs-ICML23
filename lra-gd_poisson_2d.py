@@ -1,6 +1,6 @@
 """
-ENGD Optimization.
-Two dimensional Poisson equation example. Solution given by
+Learning Rate Annealing Gradient Descent Optimization.
+Two dimensional laplace example. Solution given by
 
 u(x,y) = sin(pi*x) * sin(py*y).
 
@@ -8,13 +8,12 @@ u(x,y) = sin(pi*x) * sin(py*y).
 import jax
 import jax.numpy as jnp
 from jax import random, grad, vmap, jit
+import optax
 
 from ngrad.models import init_params, mlp
 from ngrad.domains import Square, SquareBoundary
 from ngrad.integrators import DeterministicIntegrator
 from ngrad.utility import laplace, grid_line_search_factory
-from ngrad.inner import model_laplace, model_identity
-from ngrad.gram import gram_factory, nat_grad_factory
 
 jax.config.update("jax_enable_x64", True)
 
@@ -52,26 +51,6 @@ v_grad_u_star = vmap(
 def f(x):
     return 2. * jnp.pi**2 * u_star(x)
 
-# gramians
-gram_bdry = gram_factory(
-    model = model,
-    trafo = model_identity,
-    integrator = boundary_integrator
-)
-
-gram_laplace = gram_factory(
-    model = model,
-    trafo = model_laplace,
-    integrator = interior_integrator
-)
-
-@jit
-def gram(params):
-    return gram_laplace(params) + gram_bdry(params)
-
-# natural gradient
-nat_grad = nat_grad_factory(gram)
-
 # compute residual
 laplace_model = lambda params: laplace(lambda x: model(params, x))
 residual = lambda params, x: (laplace_model(params)(x) + f(x))**2.
@@ -91,9 +70,11 @@ def loss(params):
     return interior_loss(params) + boundary_loss(params)
 
 # set up grid line search
-grid = jnp.linspace(0, 30, 31)
-steps = 0.5**grid
-ls_update = grid_line_search_factory(loss, steps)
+# grid = jnp.linspace(0, 30, 31)
+# steps = 0.5**grid
+# ls_update = grid_line_search_factory(loss, steps)
+eta = 0.001
+ls_update = jit(lambda p, dp: [(w - eta * dw, b - eta * db) for (w, b), (dw, db) in zip(p, dp)])
 
 # errors
 error = lambda x: model(params, x) - u_star(x)
@@ -104,26 +85,34 @@ v_error_abs_grad = vmap(
 
 def l2_norm(f, integrator):
     return integrator(lambda x: (f(x))**2)**0.5
-
-
+   
 norm_sol_l2 = l2_norm(v_u_star, eval_integrator)
 norm_sol_h1 = norm_sol_l2 + l2_norm(v_grad_u_star, eval_integrator)
 
-   
-# natural gradient descent with line search
-iterations = 1000
-save_freq = 10
+# learning rate annealing gradient descent with line search
+iterations = 100000
+save_freq = 100
 
 import numpy as np
+
 data = np.empty((iterations // save_freq + 1, 5))
 
+alpha = 0.1
+wb = 1.
+
 for iteration in range(iterations + 1):
-    grads = grad(loss)(params)
-    nat_grads = nat_grad(params, grads)
+    interior_grads = grad(interior_loss)(params)
+    boundary_grads = grad(boundary_loss)(params)
 
-    params, actual_step = ls_update(params, nat_grads)
-
+    updates = jax.tree_util.tree_map(
+        lambda i, b: i + wb * b,
+        interior_grads,
+        boundary_grads,
+    )
+    params = ls_update(params, updates)
+    
     if iteration % save_freq == 0:
+        # errors
         l2_error = l2_norm(v_error, eval_integrator)
         h1_error = l2_error + l2_norm(v_error_abs_grad, eval_integrator)
 
@@ -136,15 +125,21 @@ for iteration in range(iterations + 1):
         ]
 
         print(
-            f'Seed: {seed} ENGD Iteration: {iteration}'
+            f'Seed: {seed} GD Iteration: {iteration}'
             f'\n  with loss: {loss(params)} = {interior_loss(params)} + {boundary_loss(params)}'
             f'\n  with relative L2 error: {l2_error / norm_sol_l2}'
             f'\n  with relative H1 error: {h1_error / norm_sol_h1}'
-            f'\n  with step: {actual_step}'
         )
 
-np.save("data/poisson/engd/data.npy", data)
+        interior_grads_raveled, _ = jax.flatten_util.ravel_pytree(interior_grads)
+        boundary_grads_raveled, _ = jax.flatten_util.ravel_pytree(boundary_grads)
+
+        # update loss weights
+        wb_hat = len(boundary_grads_raveled) * jnp.max(jnp.abs(interior_grads_raveled)) / (wb * jnp.sum(jnp.abs(boundary_grads_raveled)))
+        wb = (1 - alpha) * wb + alpha * wb_hat
+
+np.save("data/poisson/lra-gd/data.npy", data)
 
 from util import save
 n = 300
-save("poisson", "engd", n, u_star, v_model, params)
+save("poisson", "lra-gd", n, u_star, v_model, params)
