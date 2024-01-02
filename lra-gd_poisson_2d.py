@@ -90,7 +90,7 @@ norm_sol_l2 = l2_norm(v_u_star, eval_integrator)
 norm_sol_h1 = norm_sol_l2 + l2_norm(v_grad_u_star, eval_integrator)
 
 # learning rate annealing gradient descent with line search
-iterations = 100000
+iterations = 200000
 save_freq = 100
 
 import numpy as np

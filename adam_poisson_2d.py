@@ -86,7 +86,7 @@ optimizer = optax.adam(learning_rate=0.001)
 opt_state = optimizer.init(params)
    
 # adam gradient descent with line search
-iterations = 100000
+iterations = 200000
 save_freq = 100
 
 import numpy as np
