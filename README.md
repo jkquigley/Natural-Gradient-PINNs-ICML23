@@ -1,3 +1,6 @@
+This fork contains adaptations made for a research project into a topic of deep learning. The code changes include additions of algorithms. These are Learning Rate Annealing Gradient Descent ([LRA-GD](https://epubs.siam.org/doi/10.1137/20M1318043)), MultiAdam and an original algorithm Multi-ENGD. This original algorithm is an adaptation of the ENGD algorithm found herein and uses ideas originating from the autors of [MultiAdam](https://proceedings.mlr.press/v202/yao23c.html). With this algorithm we are able to achieve better results than the ENGD presented below.
+
+
 **Achieving High Accuracy with PINNs via Energy Natural Gradient Descent ICML 2023**
 
 Topic: *Github Repo for the ICML 2023 paper: Energy Natural gradient methods for PINNs and Deep Ritz.*
